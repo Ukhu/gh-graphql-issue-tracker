@@ -13,14 +13,82 @@ const ax = axios.create({
 
 const TITLE = 'React GraphQL Github Client';
 
-const GET_ORGANIZATION = `
-  {
-    organization(login: "facebook") {
+const GET_ORGANIZATION_REPO_ISSUES = `
+  query($organization: String!, $repository: String!, $cursor: String) {
+    organization(login: $organization) {
       name
       url
+      repository(name: $repository) {
+        name
+        url
+        issues(first: 5, after: $cursor, states: [OPEN]) {
+          edges {
+            node {
+              id
+              title
+              url
+              reactions(last: 3) {
+                edges {
+                  node {
+                    id
+                    content
+                  }
+                }
+              }
+            }
+          }
+          totalCount
+          pageInfo {
+            endCursor
+            hasNextPage
+          }
+        }
+      }
     }
   }
 `
+
+const getIssuesOfOrgizationRepo = (path, cursor) => {
+  const [organization, repository] = path.split('/');
+
+  return ax.post('', { 
+    query: GET_ORGANIZATION_REPO_ISSUES,
+    variables: {
+      organization,
+      repository,
+      cursor
+    }
+  })
+}
+
+const resolveIssuesQuery = (queryResult, cursor) => state => {
+  const { data, errors } = queryResult.data;
+
+  if (!cursor) {
+    return {
+      organization: data.organization,
+      errors,
+    };
+  }
+
+  const { edges: oldIssues } = state.organization.repository.issues;
+  const { edges: newIssues } = data.organization.repository.issues;
+  const updatedIssues = [...oldIssues, ...newIssues];
+
+  return {
+    organization: {
+      ...data.organization,
+      repository: {
+        ...data.organization.repository,
+        issues: {
+          ...data.organization.repository.issues,
+          edges: updatedIssues,
+        },
+      },
+    },
+    errors,
+  };
+};
 
 class App extends React.Component {
   state = {
@@ -30,22 +98,28 @@ class App extends React.Component {
   }
 
   componentDidMount() {
-    ax.post('', { query: GET_ORGANIZATION })
-      .then(response => {
-        const { data, errors } = response.data;
-        this.setState({
-          organization: data && response.data.data.organization,
-          errors: errors && response.data.errors
-        })
-      })
+    this.onFetchFromGithub()
+  }
+
+  onFetchFromGithub(cursor) {
+    getIssuesOfOrgizationRepo(this.state.repoPath, cursor)
+    .then(queryResult =>
+      this.setState(resolveIssuesQuery(queryResult, cursor)),
+    );
+  }
+
+  fetchMoreIssues = () => {
+    const { endCursor } = this.state.organization.repository.issues.pageInfo;
+    this.onFetchFromGithub(endCursor);
   }
 
   onSubmit = (e) => {
     e.preventDefault();
+    this.onFetchFromGithub();
   }
 
   onChange = (e) => {
-    this.setState({ path: e.target.value })
+    this.setState({ repoPath: e.target.value })
   }
 
   render() {
@@ -71,7 +145,10 @@ class App extends React.Component {
 
         <hr />
         
-        <Organization organization={organization} errors={errors}/>
+        <Organization 
+          organization={organization}
+          onFetchMoreIssues={this.fetchMoreIssues}
+          errors={errors}/>
       </div>
     )
   }

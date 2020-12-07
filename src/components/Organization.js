@@ -1,6 +1,7 @@
 import React from 'react';
+import Repository from './Repository';
 
-const Organization = ({ organization, errors }) => {
+const Organization = ({ organization, errors, onFetchMoreIssues }) => {
   if (errors) {
     return (
       <div>
@@ -10,7 +11,7 @@ const Organization = ({ organization, errors }) => {
     )
   }
 
-  if (!organization) {
+  if (!organization || !organization.repository) {
     return (
       <p>No information yet ...</p>
     )
@@ -22,6 +23,9 @@ const Organization = ({ organization, errors }) => {
         <strong>Issues from Organization:</strong>
         <a href={organization.url}>{organization.name}</a>
       </p>
+      <Repository
+        repository={organization.repository}
+        onFetchMoreIssues={onFetchMoreIssues}/>
     </div>
   )
 };
