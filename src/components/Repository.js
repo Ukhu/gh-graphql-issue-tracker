@@ -1,6 +1,6 @@
 import React from 'react';
 
-const Repository = ({repository, onFetchMoreIssues}) => {
+const Repository = ({repository, onFetchMoreIssues, onStarRepository}) => {
   return (
     <div>
       <p>
@@ -24,6 +24,11 @@ const Repository = ({repository, onFetchMoreIssues}) => {
       {repository.issues.pageInfo.hasNextPage && (
         <button onClick={onFetchMoreIssues}>More</button>
       )}
+      <button
+        onClick={() => onStarRepository(repository.id, repository.viewerHasStarred)}>
+          {repository.viewerHasStarred ? 'Unstar' : 'Star'}
+      </button>
+      <span>{repository.stargazers.totalCount} stars</span>
     </div>
   )
 }

@@ -19,8 +19,13 @@ const GET_ORGANIZATION_REPO_ISSUES = `
       name
       url
       repository(name: $repository) {
+        id
         name
         url
+        stargazers {
+          totalCount
+        }
+        viewerHasStarred
         issues(first: 5, after: $cursor, states: [OPEN]) {
           edges {
             node {
@@ -43,6 +48,26 @@ const GET_ORGANIZATION_REPO_ISSUES = `
             hasNextPage
           }
         }
+      }
+    }
+  }
+`
+
+const ADD_STAR = `
+  mutation ($repositoryId: ID!) {
+    addStar(input: {starrableId: $repositoryId}) {
+      starrable {
+        viewerHasStarred
+      }
+    }
+  }
+`
+
+const REMOVE_STAR = `
+  mutation ($repositoryId: ID!) {
+    removeStar(input: {starrableId: $repositoryId}) {
+      starrable {
+        viewerHasStarred
       }
     }
   }
@@ -90,6 +115,64 @@ const resolveIssuesQuery = (queryResult, cursor) => state => {
   };
 };
 
+const addStarToRepository = repositoryId => {
+  return ax.post('', {
+    query: ADD_STAR,
+    variables: { repositoryId },
+  });
+};
+
+const removeStarToRepository = repositoryId => {
+  return ax.post('', {
+    query: REMOVE_STAR,
+    variables: { repositoryId },
+  });
+};
+
+const resolveAddStarMutation = mutationResult => state => {
+  const {
+    viewerHasStarred,
+  } = mutationResult.data.data.addStar.starrable;
+
+  const { totalCount } = state.organization.repository.stargazers;
+
+  return {
+    ...state,
+    organization: {
+      ...state.organization,
+      repository: {
+        ...state.organization.repository,
+        viewerHasStarred,
+        stargazers: {
+          totalCount: totalCount + 1,
+        },
+      },
+    },
+  };
+};
+
+const resolveRemoveStarMutation = mutationResult => state => {
+  const {
+    viewerHasStarred,
+  } = mutationResult.data.data.removeStar.starrable;
+
+  const { totalCount } = state.organization.repository.stargazers;
+
+  return {
+    ...state,
+    organization: {
+      ...state.organization,
+      repository: {
+        ...state.organization.repository,
+        viewerHasStarred,
+        stargazers: {
+          totalCount: totalCount - 1,
+        },
+      },
+    },
+  };
+};
+
 class App extends React.Component {
   state = {
     repoPath: 'facebook/react',
@@ -107,6 +190,19 @@ class App extends React.Component {
       this.setState(resolveIssuesQuery(queryResult, cursor)),
     );
   }
+
+  onStarRepository = (repositoryId, viewerHasStarred) => {
+    if(viewerHasStarred) {
+      removeStarToRepository(repositoryId).then(mutationResult =>
+        this.setState(resolveRemoveStarMutation(mutationResult)),
+      );
+    } else {
+      addStarToRepository(repositoryId).then(mutationResult =>
+        this.setState(resolveAddStarMutation(mutationResult)),
+      );
+    }
+    
+  };
 
   fetchMoreIssues = () => {
     const { endCursor } = this.state.organization.repository.issues.pageInfo;
@@ -148,6 +244,7 @@ class App extends React.Component {
         <Organization 
           organization={organization}
           onFetchMoreIssues={this.fetchMoreIssues}
+          onStarRepository={this.onStarRepository}
           errors={errors}/>
       </div>
     )
